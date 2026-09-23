@@ -17,7 +17,7 @@
 
 1. **场层面（历史机制）**：位移前在实空间对势场做 `phi_png = phi + FNL * phi^2`；
 2. **示踪物层面（2026-09-21 新增）**：对示踪物做位移 `Psi = i·k·(Ainj/k²)·phi_G`，
-   即密度调制 `delta_t -> delta_t·[1 + Ainj·phi_G]`，其中 **`Ainj = 2·FNL·B_PHI`**
+   在大尺度线性极限增加 `Ainj·phi_G` 的密度响应，其中 **`Ainj = 2·FNL·B_PHI`**
    （详见下面"示踪物层面 PNG 注入"一节）。
 
 fNL 通过配置关键字 `FNL`（或库接口 `EZmock_set_fnl()`）自由设置，0 表示纯高斯初条件；
@@ -37,8 +37,9 @@ fNL 通过配置关键字 `FNL`（或库接口 `EZmock_set_fnl()`）自由设置
 1. **LINEAR_PK 必须是转移函数 T(k)**（量级 ~O(1)，如自带的 `Tk_0.txt`），**不是 P(k) 表**。
    位移公式 `twb = Transfer/Dplus/Beta` 直接乘输入曲线；喂 P(k)（~1e4 量级）会让位移放大上万倍
    → CIC 装填越界段错误。
-2. **PK_INTERP_LOG 必须为 F（或不设，默认 F）**。log 插值模式在本改造版中是坏的：
-   perturb.c 里对 k 先 `log(k)` 后又对结果 `log()` → 全场 NaN → 段错误。
+2. **PK_INTERP_LOG 必须为 F（或不设，默认 F）**。未移植的 log 插值模式现在会在
+   `EZmock_setup_linear_pk()` 中明确报错；不再让错误内核生成 NaN。
+   库接口的白噪声输入也尚未按 PNG 的 T(k) 约定移植，现在会明确报错。
 3. **初条件形状仍硬编码，生长因子已动态化**（2026-09-21 改造，详见下节）：
    - 写死的只剩初条件形状 `Anorm=12275.369233`、`PrimordialIndex=0.9624`（与 `Tk_0.txt` 配套；
      输入表只在位移步进 `pk_interp()` 里当 `Transfer` 用）。原代码里**未被使用**的
@@ -67,17 +68,17 @@ fNL 通过配置关键字 `FNL`（或库接口 `EZmock_set_fnl()`）自由设置
 **语义变化（重要）**：`REDSHIFT` 从"只通过 growth2 缩放输入表的摆设"变成**盒子的真实输出红移**，
 同时驱动 `Dplus`（密度幅度）与 `vfac`（RSD 速度）。`REDSHIFT_PK` 对本改造版无意义（被忽略并告警）。
 
-**另一个坑：growth2 双重计入**。`linear_pk.c` 会按 stock 版约定把输入表乘
-`growth2 = (D(z)/D(z_pk))²`；本版输入表是 z=0 的 T(k)，红移换算交给 `Dplus`，
-两者叠加会让位移幅度再低 `(D(1)/D(0))² ≈ 0.37` 倍。因此 `src/main/run_mock.c` 在
-`EZmock_set_cosmology()` 之后**强制 `cosmo->growth2 = 1.0`**，并打印生长因子溯源行：
+**growth2 双重计入已在库层修复**。`linear_pk.c` 现在不会把原版 P(k) 流程的
+`growth2 = (D(z)/D(z_pk))²` 乘进输入 T(k)；红移换算只由 `Dplus` 承担。
+CLI 仍将遗留的 `cosmo->growth2` 置 1，保持输出头中的有效输入缩放值不变，并打印生长因子溯源行：
 
 ```
 PNG growth factors: Omega_m = 0.3175, D0 = 0.789246093, Dplus = 1.650333193, Beta = 6.713659e-08, vfac = 78.796529
 ```
 
 配置里显式给了 `GROWTH_PK/VELOCITY_FAC` 时（`eval_growth=false` 分支）：`VELOCITY_FAC` 照用，
-`GROWTH_PK` 仍被置 1；`D0/Dplus/Beta` 依旧按 `OMEGA_M/DE_EOS_W/REDSHIFT` 算，所以那几个键不能省。
+`GROWTH_PK` 不作用于 T(k)，CLI 输出头记录有效值 1；`D0/Dplus/Beta` 依旧按
+`OMEGA_M/DE_EOS_W/REDSHIFT` 算，所以那几个键不能省。
 
 **迁移对照**（`twb ∝ D0/Dplus`，位移幅度）：
 
@@ -105,26 +106,28 @@ PDF/位移/示踪物采样后响应会被压缩——实测固定四旋钮时，
 **示踪物层面注入**绕过整条标定链，直接给最终示踪物叠加上目标密度的 PNG 响应，
 使"配置 FNL 是多少就匹配 f_NL 是多少的 N-body"。
 
-**推导（与代码注释一致）**：希望密度场做如下的线性（对 Ainj）调制
+**推导（与代码注释一致）**：目标是在大尺度线性极限增加
+`Ainj·phi_G` 的示踪物密度响应，其中 `Ainj = 2·FNL·B_PHI`。对示踪点
+做位置平移，数密度守恒在位移的一阶给出
 
-    delta_t(x)  ->  delta_t(x) · [1 + Ainj · phi_G(x)],    Ainj = 2 · FNL · B_PHI
-
-把示踪点整体位移 `n'(x) = n(x - Psi(x))`，一阶展开给出
-
-    delta_hat'(k) = delta_hat(k) - i k·Psi_hat(k) + O(Psi·grad n)
+    delta' = delta - div[(1+delta)Psi]
+           = delta + Ainj·phi_G + Ainj·phi_G·delta - Psi·grad(delta) + O(Psi²)
 
 要求 `-i k·Psi_hat(k) = Ainj·phi_hat_G(k)`，即
 
     Psi_hat_i(k) = i · k_i · (Ainj / k²) · phi_hat_G(k)
 
 ——纯 1/k² 核（**不乘任何转移函数**，与 ZA 位移的 `twb` 形状项不同）。
-`O(Psi·grad n)` 的平流/圈图项相对大小 ~1/(b₁·M)~1e-3，可忽略。
+输运项 `-Psi·grad(delta)` 在非线性场中不能普遍忽略；低 k 平均功率标定
+也不能代替目标协方差的验证。
 目标响应（对照 Quijote f_NL=100 的 500 realizations P0）：
 
     L(k) = 2·Ainj/(b₁·M(k)) = 4·FNL·B_PHI/(b₁·M(k))，  M = k²T/(Dplus·Beta)
 
-因此只要取 **`B_PHI = b_phi(N-body 样本)`** 就实现 1:1；`b_phi` 是示踪物对 `phi_G` 的偏置
-（Quijote 测量值在 k≈0.008 处约 2.4，拟合区中位 ~1.45，见验证目录）。
+`B_PHI` 是本实现的输入系数，应由固定注入核的实际功率响应标定。若文献使用
+`delta_h = b1·delta_m + f_NL·b_phi(lit)·phi_G`，在理想线性极限有
+`b_phi(lit)=2·B_PHI`；直接从当前代码的功率响应拟合得到的 `B_PHI` 应保留原标定口径，
+不要机械再除以 2。不同 k 区间的最佳标定值见下文。
 
 **实现**：`perturb.c` 里沿用 `mesh->phik`（phi_G 的 FFT 系数，经 `phik_copy` 在 `plan1`
 之后仍然存活），对每个模构造 `(i·phi_hat_G)·k_i·(Ainj/k²)`，做三次 C2R 得实空间位移场
@@ -135,13 +138,18 @@ PDF/位移/示踪物采样后响应会被压缩——实测固定四旋钮时，
 
 | 键 | 含义 | 不设时 |
 |---|---|---|
-| `B_PHI` | 示踪物层面响应 `Ainj = 2·FNL·B_PHI` | 0（不注入） |
-| `FNL_FIELD` | 场层面二次项系数 `phi + FNL_FIELD·phi²` | `B_PHI!=0` → 0（标定模式，关掉未标定的场层面项）；否则 = `FNL`（历史行为） |
+| `B_PHI` | 本实现的示踪物注入系数 `Ainj = 2·FNL·B_PHI` | 0（不注入） |
+| `FNL_FIELD` | 场层面二次项系数 `phi + FNL_FIELD·phi²` | `B_PHI!=0` → 0（标定模式，关掉未标定的场层面项）；否则 = `FNL`（历史行为）；CLI 与库接口一致 |
+
+最新示踪物注入模式已对平均功率响应做标定；论文草稿中场层初条件模式的
+协方差验证不能直接视为本模式的验证。在将新模式用于 PNG 协方差结论前，
+应以同一版本的 mock 与 Quijote-PNG 比较目标协方差及推断结果。
 
 - `FNL_FIELD=0` 表示场层面二次项恰好关闭（`phi_png = phi`）；库层面用 `HUGE_VAL`
-  哨兵值表示"未设置"（回退到 `FNL`），`EZmock_set_fnl_field()` 未调用时行为同历史版。
-- **逐位一致保证**：`B_PHI=0` 且 `FNL_FIELD` 不设时，配置路径、RNG 流、输出与改造前二进制
-  逐字节相同（A/B 实测,FNL=180 与 FNL=0 两档均过,见验证目录）。
+  哨兵值表示"未设置"；此时 `B_PHI=0` 回退到 `FNL`，`B_PHI!=0` 则取 0。
+- **逐位一致的条件**：`B_PHI=0`、`FNL_FIELD` 不设且线程数相同时，历史模式的
+  配置路径与 RNG 流保持一致（先前的 A/B 实测见验证目录）。CLI 现在尊重
+  `OMP_NUM_THREADS`，上限仍为 24；改变线程数会改变随机数流，不能要求目录逐字节相同。
 - 输出头记录两键的值（ASCII：`# B_PHI=... , FNL_FIELD=...`；FITS 键 `B_PHI`/`FNL_FLD`）。
 
 ## 改造点文件表

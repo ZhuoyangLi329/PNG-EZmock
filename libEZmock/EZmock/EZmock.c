@@ -46,7 +46,7 @@ EZMOCK *EZmock_init(const double Lbox, const int Ngrid, const int randgen,
   if (Lbox <= 0) {
     *err = EZMOCK_ERR_ARG_LBOX; return NULL;
   }
-  if (Ngrid <= 0 || Ngrid > EZMOCK_MAX_GRID_SIZE) {
+  if (Ngrid <= 1 || (Ngrid & 1) || Ngrid > EZMOCK_MAX_GRID_SIZE) {
     *err = EZMOCK_ERR_ARG_NGRID; return NULL;
   }
   switch (randgen) {
@@ -123,7 +123,7 @@ EZMOCK *EZmock_init(const double Lbox, const int Ngrid, const int randgen,
   conf->Ng = Ngrid;
   conf->fnl = 0.0;    //默认 fNL = 0（高斯初条件）；需要 PNG 时由 EZmock_set_fnl 或配置文件设置
   conf->b_phi = 0.0;  //默认 b_φ = 0（不指示踪物层面注入）；由 EZmock_set_b_phi 设置
-  conf->fnl_field = HUGE_VAL;  /* 场层面二次项系数未设置（退回 fnl，历史行为）；
+  conf->fnl_field = HUGE_VAL;  /* 未设置时 B_PHI=0 退回 fnl，否则关闭场层注入；
                                   由 EZmock_set_fnl_field 或配置文件设置 */
 
   return ez;
@@ -131,8 +131,8 @@ EZMOCK *EZmock_init(const double Lbox, const int Ngrid, const int randgen,
 
 /******************************************************************************
 Function `EZmock_set_fnl`:
-  Set the local PNG parameter fNL of the initial potential.
-  作用：把 fNL 存到 ez->conf 里，供 perturb.c 生成 PNG 初条件势时使用。
+  Set the local PNG parameter used by the enabled PNG mechanisms.
+  Field-level injection defaults to this value only when B_PHI is zero.
 Arguments:
   * `ez`:       instance of the EZmock generator;
   * `fnl`:      local PNG parameter fNL (0 for Gaussian IC).
@@ -145,11 +145,11 @@ void EZmock_set_fnl(EZMOCK *ez, const double fnl) {
 
 /******************************************************************************
 Function `EZmock_set_b_phi`:
-  Set the tracer response to the potential b_φ for the tracer-level PNG
+  Set the calibrated tracer-level PNG input coefficient B_PHI for the
   injection (Ainj = 2*fnl*b_phi)。0 表示关闭该注入（默认）。
 Arguments:
   * `ez`:       instance of the EZmock generator;
-  * `b_phi`:    tracer response to the local PNG potential.
+  * `b_phi`:    coefficient calibrated for this implementation.
 ******************************************************************************/
 void EZmock_set_b_phi(EZMOCK *ez, const double b_phi) {
   if (!ez) return;
@@ -160,7 +160,8 @@ void EZmock_set_b_phi(EZMOCK *ez, const double b_phi) {
 /******************************************************************************
 Function `EZmock_set_fnl_field`:
   Set the coefficient of the field-level quadratic term,
-  phi_png = phi + fnl_field * phi^2。不调用时该系数等于 fnl（历史行为）。
+  phi_png = phi + fnl_field * phi^2。不调用时 B_PHI=0 使用 fnl，
+  B_PHI 非零时使用 0；显式调用本函数可覆盖默认值。
 Arguments:
   * `ez`:          instance of the EZmock generator;
   * `fnl_field`:   coefficient of the real-space quadratic term.

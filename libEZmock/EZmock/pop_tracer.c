@@ -191,6 +191,7 @@ static void bias_model(EZMOCK *ez, EZMOCK_PDF *pdf, const real rho_c,
     const size_t pcnt = (tid < rem) ? pnum + 1 : pnum;
     const size_t istart = (tid < rem) ? pcnt * tid : pnum * tid + rem;
     const size_t iend = istart + pcnt;
+    ifirst[tid] = iend;  /* Sentinel for a chunk without eligible cells. */
 
     /* Traverse the density field with OpenMP threads. */
     for (size_t i = istart; i < iend; i++) {
@@ -208,6 +209,15 @@ static void bias_model(EZMOCK *ez, EZMOCK_PDF *pdf, const real rho_c,
         mesh->rhot[i] = (mesh->rho[i] > rho_sat) ? rho_sat : mesh->rho[i];
         cnt[tid]++;
       }
+    }
+  }
+
+  /* Empty chunks cannot lend a cell to the preceding thread, and their
+     boundaries cannot be used by the second pass.  Fail before either step. */
+  for (int tid = 0; tid < conf->nthread; tid++) {
+    if (cnt[tid] == 0) {
+      free(ifirst); free(cnt);
+      *err = EZMOCK_ERR_EMPTY_CHUNK; return;
     }
   }
 
@@ -934,7 +944,7 @@ static void generate_tracers(EZMOCK *ez, const EZMOCK_PDF *pdf,
     for (int i = 0; i < 6; i++) free(cat[i]);
     return;
   }
-  size_t cnt = 0;
+  size_t cnt = iv;  /* Append after tracers already attached to particles. */
 
   /* Generate tracers without host particles. */
   for (int i = 0; i < conf->Ng; i++) {

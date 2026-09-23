@@ -81,13 +81,13 @@ Generate the Effective Zel'dovich approximation mock (EZmock).\n\
   -n, --num             " FMT_KEY(NUM_TRACER) "      Long integer\n\
         Set the expected number of tracers to be generated\n\
   -p, --pk              " FMT_KEY(LINEAR_PK) "       String\n\
-        Specify the filename of the input linear matter power spectrum\n\
+        Specify the filename of the z=0 transfer function T(k)\n\
   -P, --pk-nw           " FMT_KEY(LINEAR_PK_NW) "    String\n\
-        Specify the filename of the input linear non-wiggle power spectrum\n\
+        Specify the filename of the non-wiggle transfer function\n\
   -Z, --redshift-pk     " FMT_KEY(REDSHIFT_PK) "     Double\n\
-        Specify the redshift at which the power spectra are normalized\n\
+        Legacy reference redshift; T(k) is defined at z=0\n\
       --interp-log      " FMT_KEY(PK_INTERP_LOG) "   Boolean\n\
-        Indicate whether to interpolate the power spectra in log scale\n\
+        Unsupported in this PNG fork; must be F\n\
   -r, --rng             " FMT_KEY(RAND_GENERATOR) "  Integer\n\
         Specify the random number generation algorithm\n\
   -s, --seed            " FMT_KEY(RAND_SEED) "       Long integer\n\
@@ -99,13 +99,13 @@ Generate the Effective Zel'dovich approximation mock (EZmock).\n\
   -f, --fnl             " FMT_KEY(FNL) "             Double\n\
         Set the local PNG parameter fNL of the initial potential (0: Gaussian)\n\
       --b-phi           " FMT_KEY(B_PHI) "           Double\n\
-        Set the tracer response b_phi of the tracer-level PNG injection\n\
+        Set the calibrated tracer-level PNG injection coefficient\n\
         (Ainj = 2*FNL*B_PHI; 0 or unset disables the injection)\n\
       --fnl-field       " FMT_KEY(FNL_FIELD) "       Double\n\
         Set the coefficient of the field-level quadratic term\n\
         (unset: equal to FNL if B_PHI=0, otherwise 0)\n\
       --growth-pk       " FMT_KEY(GROWTH_PK) "       Double\n\
-        Set the normalization factor of the input linear power spectra\n\
+        Legacy growth parameter; not applied to T(k)\n\
       --vel-fac         " FMT_KEY(VELOCITY_FAC) "    Double\n\
         Set the factor for computing peculiar velocities from displacements\n\
   -m, --omega-m         " FMT_KEY(OMEGA_M) "         Double\n\
@@ -175,20 +175,19 @@ NUM_TRACER      = \n\
 #############################################\n\
 \n\
 LINEAR_PK       = \n\
-    # String, filename for the input linear matter power spectrum.\n\
-    # It must be a text file with the leading two columns being k and P(k).\n\
+    # String, filename for the z=0 dimensionless transfer function.\n\
+    # It must be a text file with leading columns k [h/Mpc] and T(k).\n\
     # Lines starting with '%c' are omitted.\n\
 LINEAR_PK_NW    = \n\
-    # String, filename for the input linear non-wiggle matter power spectrum.\n\
+    # String, filename for the non-wiggle transfer function.\n\
     # It is only used of `BAO_ENHANCE` is non-zero.\n\
-    # It must be a text file with the leading two columns being k and P_nw(k).\n\
+    # It must be a text file with the leading two columns being k and T_nw(k).\n\
     # Lines starting with '%c' are omitted.\n\
 REDSHIFT_PK     = \n\
-    # Double-precision number, redshift at which `LINEAR_PK` is normalized.\n\
-    # It is only used if `GROWTH_PK` and `VELOCITY_FAC` are not both set.\n\
+    # Legacy reference redshift. T(k) is defined at z=0, so this value\n\
+    # does not scale the input table.\n\
 PK_INTERP_LOG   = \n\
-    # Boolean option, indicate whether to interpolate\n\
-    # the input power spectrum in log scale (unset: %c).\n\
+    # Unsupported in this PNG fork; must be F (unset: %c).\n\
 RAND_GENERATOR  = \n\
     # Integer, specify the random number generator (unset: %d).\n\
     # Allowed values are:\n\
@@ -208,12 +207,12 @@ FNL             = \n\
     # potential (unset: "
     OFMT_DBL "); 0 stands for Gaussian initial conditions.\n\
 B_PHI           = \n\
-    # Double-precision number, tracer response b_phi of the tracer-level PNG\n\
+    # Double-precision number, calibrated tracer-level PNG coefficient\n\
     # injection: the tracers are shifted by Psi = 2*FNL*B_PHI*grad(grad^-2 phi),\n\
-    # so that delta_t -> delta_t*(1 + 2*FNL*B_PHI*phi) (unset: "
+    # giving a linear large-scale response 2*FNL*B_PHI*phi (unset: "
     OFMT_DBL ");\n\
-    # 0 disables the injection. 推荐标定用法：FNL 填物理 f_NL、B_PHI 填示踪物\n\
-    # 的 b_phi（对 Quijote 拟合值），此时响应不依赖四旋钮/网格。\n\
+    # 0 disables the injection. B_PHI is calibrated from this code's response;\n\
+    # do not directly substitute a literature b_phi that already includes 2.\n\
 FNL_FIELD       = \n\
     # Double-precision number, coefficient of the field-level quadratic term\n\
     # of the initial potential: phi_png = phi + FNL_FIELD * phi^2.\n\
@@ -225,8 +224,7 @@ FNL_FIELD       = \n\
 ##################################################\n\
 \n\
 GROWTH_PK       = \n\
-    # Double-precision number, (D(z) / D(z_pk))^2, for the normalization of\n\
-    # the input power spectrum.\n\
+    # Legacy growth parameter; not applied to the input T(k).\n\
     # It is only used if `VELOCITY_FAC` is also set.\n\
 VELOCITY_FAC    = \n\
     # Factor for computing peculiar velocities from Lagrangian displacements,\n\
@@ -235,18 +233,18 @@ VELOCITY_FAC    = \n\
 OMEGA_M         = \n\
     # Double-precision number, matter (without neutrino) density parameter\n\
     # at z = 0.\n\
-    # It is only used of `GROWTH_PK` and `VELOCITY_FAC` are not both set.\n\
+    # Required for PNG normalization even when GROWTH_PK/VELOCITY_FAC are set.\n\
 OMEGA_NU        = \n\
     # Double-precision number, neutrino density parameter at z = 0 (unset: "
     OFMT_DBL ").\n\
-    # It is only used of `GROWTH_PK` and `VELOCITY_FAC` are not both set.\n\
+    # It is only used if GROWTH_PK/VELOCITY_FAC are not both set.\n\
 DE_EOS_W        = \n\
     # Double-precision number, dark energy equation of state: w (unset: "
     OFMT_DBL ").\n\
-    # It is only used of `GROWTH_PK` and `VELOCITY_FAC` are not both set.\n\
+    # Used for PNG normalization even when GROWTH_PK/VELOCITY_FAC are set.\n\
 REDSHIFT        = \n\
     # Double-precision number, redshift of the periodic box.\n\
-    # It is only used of `GROWTH_PK` and `VELOCITY_FAC` are not both set.\n\
+    # Required for PNG normalization even when GROWTH_PK/VELOCITY_FAC are set.\n\
 \n\
 ##########################################################\n\
 #  Parameters for mock generation                        #\n\
@@ -656,6 +654,10 @@ static int conf_verify(const cfg_t *cfg, CONF *conf) {
 
   /* Check FNL（local PNG 参数，可选；未设置时取默认值 0，即高斯初条件）. */
   if (!cfg_is_set(cfg, &conf->fnl)) conf->fnl = DEFAULT_FNL;
+  if (!isfinite(conf->fnl)) {
+    P_ERR(FMT_KEY(FNL) " must be finite\n");
+    return EZMOCK_ERR_CFG;
+  }
 
   /* Check B_PHI（示踪物层面 PNG 注入强度 b_φ，可选；未设置/0 表示关闭）. */
   if (!cfg_is_set(cfg, &conf->b_phi)) conf->b_phi = DEFAULT_B_PHI;
@@ -679,6 +681,9 @@ static int conf_verify(const cfg_t *cfg, CONF *conf) {
 
   /* Check GROWTH_PK and VELOCITY_FAC. */
   if (cfg_is_set(cfg, &conf->growth2) && cfg_is_set(cfg, &conf->vfac)) {
+    CHECK_EXIST_PARAM(OMEGA_M, cfg, &conf->omega_m);
+    CHECK_EXIST_PARAM(REDSHIFT, cfg, &conf->redshift);
+    if (!cfg_is_set(cfg, &conf->eos_w)) conf->eos_w = DEFAULT_EOS_W;
     conf->eval_growth = false;
 
     if (conf->growth2 <= 0) {
@@ -805,8 +810,9 @@ static int conf_verify(const cfg_t *cfg, CONF *conf) {
   if (!cfg_is_set(cfg, &conf->verbose)) conf->verbose = DEFAULT_VERBOSE;
 
 #ifdef OMP
-  //conf->nthread = omp_get_max_threads();
-  conf->nthread = 24;
+  /* Respect OMP_NUM_THREADS and the job allocation; retain the old cap. */
+  conf->nthread = omp_get_max_threads();
+  if (conf->nthread > 24) conf->nthread = 24;
 #else
   conf->nthread = 1;
 #endif
@@ -941,4 +947,3 @@ void conf_destroy(CONF *conf) {
   if (conf->output) free(conf->output);
   free(conf);
 }
-

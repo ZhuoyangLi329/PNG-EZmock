@@ -88,6 +88,7 @@ void EZmock_set_fnl(EZMOCK *ez, const double fnl);
 Function `EZmock_set_b_phi`:
   Set the tracer response b_φ of the tracer-level PNG injection
   (注入位移场 Ψ = 2*fnl*b_phi*∇(∇⁻²φ)，0 表示关闭；推导见 perturb.c).
+  B_PHI 是本实现的输入系数，不能直接代入已吸收因子 2 的文献 b_phi。
 Arguments:
   * `ez`:       instance of the EZmock generator;
   * `b_phi`:    tracer response to the local PNG potential.
@@ -97,7 +98,8 @@ void EZmock_set_b_phi(EZMOCK *ez, const double b_phi);
 /******************************************************************************
 Function `EZmock_set_fnl_field`:
   Set the coefficient of the field-level quadratic term of the potential,
-  phi_png = phi + fnl_field * phi^2 (不调用时等于 fnl，保持历史行为).
+  phi_png = phi + fnl_field * phi^2 (不调用时：b_phi=0 则等于 fnl，
+  b_phi 非零则等于 0；显式调用可覆盖此默认值).
 Arguments:
   * `ez`:          instance of the EZmock generator;
   * `fnl_field`:   coefficient of the real-space quadratic term.
@@ -109,13 +111,13 @@ Function `EZmock_set_cosmology`:
   Set or compute structure growth parameters in a flat wCDM cosmology.
 Arguments:
   * `ez`:       instance of the EZmock generator;
-  * `pk_norm`:  linear P(k) renormalization parameter, i.e., (D(z)/D(z_pk))^2;
+  * `pk_norm`:  legacy growth parameter; not applied to the input T(k);
   * `fHa`:      the factor for computing peculiar velocity, i.e., f*H(a)*a/h;
-  * `eval`:     if true, set the above 2 parameters directly, otherwise
-                evaluating them in a flat-wCDM cosmology with the following
-                parameters;
+  * `eval`:     true: evaluate growth and velocity from flat-wCDM parameters;
+                false: use pk_norm and fHa directly for legacy growth/velocity
+                fields; PNG normalization still uses z, Omega_m and w;
   * `z`:        redshift of the EZmock snapshot to be produced;
-  * `z_pk`:     redshift at which the input linear power spectrum is normalized;
+  * `z_pk`:     legacy reference redshift; input T(k) is defined at z=0;
   * `Omega_m`:  matter (without neutrino) density parameter at present (z=0);
   * `Omega_nu`: neutrino density parameter at present (z=0);
   * `w`:        dark energy equation of state;
@@ -151,12 +153,11 @@ Arguments:
   * `ez`:       instance of the EZmock generator;
   * `k`:        ascending array for wavenumbers;
   * `n`:        number of `k` bins;
-  * `Pk`:       array for the power spectrum at `k`;
-  * `Pnw`:      array for the non-wiggle power spectrum at `k`,
+  * `Pk`:       dimensionless transfer function T(k,z=0) at `k`;
+  * `Pnw`:      corresponding non-wiggle transfer function at `k`,
                 not used if `mBAO` = 0;
   * `mBAO`:     positive: enhance BAO, negative: damp BAO, zero: no effect;
-  * `logint`:   indicate if the power spectrum interpolation is going to be
-                performed in log scale (log(k) vs. log(pk));
+  * `logint`:   unsupported in this PNG fork; must be false;
   * `err`:      integer storing the error message.
 Return:
   Zero on success; non-zero on error.
@@ -167,17 +168,18 @@ int EZmock_setup_linear_pk(EZMOCK *ez, const double *k, const int n,
 
 /******************************************************************************
 Function `EZmock_create_dens_field`:
-  Generate the EZmock density field in three possible ways:
+  Generate the EZmock density field from an input displacement or internal RNG.
   * using input displacement fields;
-  * using an input white noise field (in configuration space);
-  * from the input linear power spectra.
+  * from the input transfer function.
+  The legacy white-noise input is unsupported in this PNG fork.
 Arguments:
   * `ez`:       instance of the EZmock generator;
-  * `psi`:      if not NULL, set the displacements directly;
+  * `psi`:      if not NULL, use the displacements as supplied; the library
+                does not add field-level PNG to them, and tracer injection
+                with supplied displacements is rejected;
   * `deepcopy`: indicate if saving a copy of `psi` or using only references,
                 it is the user's responsibility to free `psi`.
-  * `delta`:    if not NULL and `psi` is NULL, set a white noise field for
-                generating the density field;
+  * `delta`:    must be NULL; the legacy white-noise path is unsupported;
   * `fixamp`:   if `psi` and `delta` are NULL, indicate whether the
                 initial amplitudes are fixed;
   * `iphase`:   if `psi` and `delta` are NULL, indicate whether the
@@ -235,4 +237,3 @@ Return:
 const char *EZmock_errmsg(const int err);
 
 #endif
-

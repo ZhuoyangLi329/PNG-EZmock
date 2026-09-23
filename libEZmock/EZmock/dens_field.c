@@ -348,6 +348,12 @@ int EZmock_create_dens_field(EZMOCK *ez, real *psi[3], bool deepcopy,
 
   EZMOCK_CONF *conf = (EZMOCK_CONF *) ez->conf;
   EZMOCK_MESH *mesh = (EZMOCK_MESH *) ez->mesh;
+  if (delta) return (*err = EZMOCK_ERR_PNG_UNSUPPORTED);
+  /* A supplied displacement cannot be paired with an old or missing PNG shift. */
+  if (psi && psi[0] && psi[1] && psi[2] &&
+      (mesh->inj[0] || mesh->inj[1] || mesh->inj[2] ||
+       (conf->fnl != 0.0 && conf->b_phi != 0.0)))
+    return (*err = EZMOCK_ERR_PNG_UNSUPPORTED);
   size_t size = (size_t) conf->Ng * conf->Ng * conf->Ng * sizeof(FFT_REAL);
   /* Dereference existing displacements if applicable. */
   if (mesh->psi_ref) mesh->psi[0] = mesh->psi[1] = mesh->psi[2] = NULL;
@@ -415,9 +421,9 @@ int EZmock_create_dens_field(EZMOCK *ez, real *psi[3], bool deepcopy,
        pop_tracer.c 再把它三线性插值到示踪物位置上）；inj[0]=NULL 表示
        关闭注入，其余代码路径会显式跳过。 */
     if (conf->fnl != 0.0 && conf->b_phi != 0.0) {
-      if (!(mesh->inj[0] = FFT_MALLOC(size)) ||
-          !(mesh->inj[1] = FFT_MALLOC(size)) ||
-          !(mesh->inj[2] = FFT_MALLOC(size))) {
+      if (!(mesh->inj[0] || (mesh->inj[0] = FFT_MALLOC(size))) ||
+          !(mesh->inj[1] || (mesh->inj[1] = FFT_MALLOC(size))) ||
+          !(mesh->inj[2] || (mesh->inj[2] = FFT_MALLOC(size)))) {
         return (*err = EZMOCK_ERR_MEMORY);
       }
     }

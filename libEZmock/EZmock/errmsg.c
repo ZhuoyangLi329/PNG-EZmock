@@ -64,6 +64,10 @@ const char *EZmock_errmsg(const int err) {
     case EZMOCK_ERR_FFT_INIT:   return "failed to initialise FFTW with OpenMP";
 #endif
     case EZMOCK_ERR_UNKNOWN:    return "unknown error";
+    case EZMOCK_ERR_PNG_UNSUPPORTED:
+      return "unsupported PNG input path or interpolation mode";
+    case EZMOCK_ERR_EMPTY_CHUNK:
+      return "an OpenMP density chunk has no valid cells; reduce the thread count";
     default:                    return "unregistered error code";
   }
 }

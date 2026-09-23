@@ -62,12 +62,11 @@ Arguments:
   * `ez`:       instance of the EZmock generator;
   * `k`:        ascending array for wavenumbers;
   * `n`:        number of `k` bins;
-  * `Pk`:       array for the power spectrum at `k`;
-  * `Pnw`:      array for the non-wiggle power spectrum at `k`,
+  * `Pk`:       dimensionless transfer function T(k,z=0) at `k`;
+  * `Pnw`:      corresponding non-wiggle transfer function at `k`,
                 not used if `mBAO` = 0;
   * `mBAO`:     positive: enhance BAO, negative: damp BAO, zero: no effect;
-  * `logint`:   indicate if the power spectrum interpolation is going to be
-                performed in log scale (log(k) vs. log(pk));
+  * `logint`:   unsupported in this PNG fork; must be false;
   * `err`:      integer storing the error message.
 Return:
   Zero on success; non-zero on error.
@@ -80,6 +79,7 @@ int EZmock_setup_linear_pk(EZMOCK *ez, const double *k, const int n,
   if (*err != EZMOCK_SUCCESS) return *err;
   if (!ez) return (*err = EZMOCK_ERR_ARG_EZ);
   if (!k || !Pk || (mBAO != 0 && !Pnw)) return (*err = EZMOCK_ERR_ARG_NULL);
+  if (logint) return (*err = EZMOCK_ERR_PNG_UNSUPPORTED);
   if (n <= 3 || n > EZMOCK_MAX_LINEAR_PK_VALUE)
     return(*err = EZMOCK_ERR_ARG_NBIN);
 
@@ -139,7 +139,7 @@ int EZmock_setup_linear_pk(EZMOCK *ez, const double *k, const int n,
 
   /* Modify the BAO strength. */
   if (mBAO == 0) {
-    for (int i = 0; i < nbin; i++) pk->P[i] = Pk[i + imin] * cosmo->growth2;
+    for (int i = 0; i < nbin; i++) pk->P[i] = Pk[i + imin];
   }
   else {
     for (int i = 0; i < nbin; i++) {
@@ -150,7 +150,6 @@ int EZmock_setup_linear_pk(EZMOCK *ez, const double *k, const int n,
         EZmock_pk_destroy(pk);
         return (*err = EZMOCK_ERR_PK_MODBAO);
       }
-      pk->P[i] *= cosmo->growth2;
     }
   }
 

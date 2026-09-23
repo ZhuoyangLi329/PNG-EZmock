@@ -66,14 +66,10 @@ int main(int argc, char *argv[]) {
     return EZMOCK_ERR_COSMO;
   }
 
-  /* ---- 中和 cosmo->growth2，并打印生长因子溯源（2026-09-21 改造）----
-     本改造版约定 LINEAR_PK 是 z=0 的转移函数 T(k)（如 Tk_0.txt），红移依赖
-     完全由 perturb.c 里的 Dplus = D(0)/D(z_out) 承担；而 EZmock_setup_linear_pk()
-     还会把输入表乘以 growth2 = (D(z)/D(z_pk))^2（stock 版 P(k) 流程的约定），
-     两者叠加即为"生长因子数两遍"：REDSHIFT=1、REDSHIFT_PK=0 时会让位移幅度
-     低 (D(1)/D(0))^2 ≈ 0.37 倍。因此这里强制 growth2 = 1。
-     （旧版把 REDSHIFT 固定为 0 恰好绕开了这个坑，现在 REDSHIFT 才真正可用；
-       REDSHIFT_PK 对本改造版不再有意义。） */
+  /* ---- 打印生长因子溯源 ----
+     LINEAR_PK 是 z=0 的转移函数 T(k)；库层不再对它乘 growth2，
+     红移依赖由 perturb.c 中的 Dplus 承担。CLI 仍将这个遗留字段置 1，
+     以保持已有输出头中 GROWTH_PK=1 的含义和格式。 */
   {
     EZMOCK_COSMO *cosmo = (EZMOCK_COSMO *) ez->cosmo;
     if (conf->eval_growth && conf->zpk != 0)
@@ -81,7 +77,7 @@ int main(int argc, char *argv[]) {
           "（输入表必须是 z=0 的 T(k)，红移换算由 Dplus 负责）\n", conf->zpk);
     if (!conf->eval_growth)
       printf(FMT_WARN "\n  note: 配置里显式给了 GROWTH_PK/VELOCITY_FAC，"
-          "其中 GROWTH_PK 会被强制置 1（T(k) 流程不做输入表缩放），"
+          "其中 GROWTH_PK 不作用于 T(k)（输出头仍记录有效值 1），"
           "生长因子量仍按 OMEGA_M/DE_EOS_W/REDSHIFT 计算\n");
     cosmo->growth2 = 1.0;
     printf("\n  PNG growth factors: Omega_m = %g, D0 = %.9f, Dplus = %.9f, "
