@@ -44,11 +44,11 @@ typedef struct {
   int nthread;          /* number of OpenMP threads                        */
   int Ng;               /* number of grids per side for the density field  */
   double Lbox;          /* box size                                        */
-  double fnl;           //local PNG 参数 fNL：初条件势里的二次项系数（0 表示高斯初条件）
+  double fnl;           /* local PNG parameter; mechanisms selected below */
   /* ---- 示踪物层面 PNG 注入（2026-09-21 新增，见 perturb.c 里推导）----
-     b_phi:     示踪物对势的响应 b_φ，注入强度 Ainj = 2*fnl*b_phi（0 表示不注入）；
+     b_phi:     本实现标定的注入系数，Ainj = 2*fnl*b_phi（0 表示不注入）；
      fnl_field: 场层面二次项的系数（phi_png = phi + fnl_field*phi^2）。
-                未设置（HUGE_VAL）时退回 fnl，即历史行为。 */
+                未设置（HUGE_VAL）时，b_phi=0 则退回 fnl，否则取 0。 */
   double b_phi;
   double fnl_field;
 } EZMOCK_CONF;
@@ -62,7 +62,7 @@ typedef struct {
 
 /* Structure for cosmological parameters. */
 typedef struct {
-  double growth2;       /* squared growth factor for P(k) renormalization  */
+  double growth2;       /* legacy growth value; not applied to input T(k)   */
   double vfac;          /* factor of linear peculiar velocity: f*H(a)*a/h  */
   /* ---- 以下是 local PNG（FNL 注入）用的生长因子量，2026-09-21 起动态计算 ----
      （在 EZmock_set_cosmology() 里由 OMEGA_M/DE_EOS_W/REDSHIFT 算出，见那里注释）

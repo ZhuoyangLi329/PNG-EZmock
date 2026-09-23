@@ -34,17 +34,17 @@
 #include "structs.h"
 
 /*============================================================================*\
-                 Interface for interpolating the power spectrum
+                 Interface for interpolating the transfer function
 \*============================================================================*/
 
 /******************************************************************************
 Function `pk_interp`:
-  Evaluate the power spectrum at given k with cubic spline interpolation.
+  Evaluate T(k) at given k with cubic spline interpolation.
 Arguments:
-  * `pk`:       instance of the power spectrum;
-  * `k`:        wavenumber of the power spectrum to be evaluated;
+  * `pk`:       stored transfer function;
+  * `k`:        wavenumber of the transfer function to be evaluated;
 Return:
-  The interpolated power spectrum value.
+  The interpolated transfer function value.
 ******************************************************************************/
 double pk_interp(const EZMOCK_PK *pk, const double k);
 

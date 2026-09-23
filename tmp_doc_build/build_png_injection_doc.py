@@ -36,7 +36,7 @@ def code(text):
 md(r"""
 # PNG-EZmock 的两种 PNG 注入机制：原理、推导与验证
 
-**文档性质**：写给未来的复习材料——公式推导 + 代码位置 + 实测数字，全部对得上仓库现状（2026-09-22）。
+**文档性质**：写给未来的复习材料——公式推导 + 代码位置 + 实测数字，按仓库现状修订于 2026-09-23。
 绝大部分是 Markdown 说明；第 5 节有 4 个只读小单元，从既有 npz 数据文件里读数字直接核对，
 秒级、可在登录节点直接运行。
 
@@ -45,8 +45,8 @@ md(r"""
 - **原版**（主人 2026 年初写的那版，现镜像在 `/global/u2/l/lzy/pyEZmocktest/softdir/EZmock/`）：
   **只在场层面注入**——实空间二次变换 $\phi \to \phi + F_{NL}\,\phi^2$，$F_{NL}=180$ 硬编码。
 - **改造版（糖糖版，`codes/ezmock_png/`，唯一维护位置）**：场层面机制**参数化保留**（配置键
-  `FNL` / `FNL_FIELD`，可关），**新增示踪物层面注入**——把超大尺度的乘性 PNG 调制
-  $\delta_t \to \delta_t\,[1 + A_{\rm inj}\,\phi_G]$ 通过一个位移场直接施加到示踪点位置上，
+  `FNL` / `FNL_FIELD`，可关），**新增示踪物层面注入**——通过一个位移场在
+  大尺度线性极限生成 $A_{\rm inj}\phi_G$ 的示踪物密度响应，
   $A_{\rm inj} \equiv 2\,F_{NL}\,B_\phi$。
 
 **一句话结论**：
@@ -56,7 +56,12 @@ md(r"""
   且换网格响应差 4 倍；
 - 改造版把 PNG 写在**"结果"（示踪物密度）**上，响应有闭式
   $\mathcal{L} = 2A_{\rm inj}/(b_1 M(k))$，只需标定**一个常数** $B_\phi \approx 2.65$，
-  且与网格无关（实测差 3%）。
+  实测两个网格的归一化响应相差约 3%。这一平均功率响应检验不等于协方差检验。
+
+**2026-09 修订说明**：位置平移并不与局部乘性数密度调制严格等价；下文的闭式响应
+只在指定的大尺度线性极限成立。`B_PHI` 是本实现直接拟合响应得到的系数，
+不能把已吸收因子 2 的文献 $b_\phi$ 数值未经换算代入。新的示踪物注入模式
+还需要独立的 PNG 协方差对照；旧场层初条件模式的验证不能直接转移到新模式。
 
 **索引**：代码 `codes/ezmock_png/`；验证/数据 `codes/ezmock_png_binary_verification/tmp_png_response/`；
 Quijote 目标数据 `data/quijote_z1_local_png_power/`；对比图 `plots/ezmock_png_binary_verification/`。
@@ -77,15 +82,19 @@ DESI/eBOSS 的协方差来自**高斯初条件**的 EZmock；若真实 $f_{\rm N
 
 **参考数据（Quijote-PNG）**：1 Gpc/$h$、$512^3$ 格、$z=1$ FoF halos（$M>10^{13}\,M_\odot/h$）：
 15000 套高斯 + $f_{\rm NL}=\{\pm 50,\pm 100\}$ 各 500 套；$f_{\rm NL}=\{0,\pm 10,\pm 20,\pm 30\}$ 的
-目标由插值构造（插值保真度已在附录验证）。大尺度上只需匹配 PNG 的**线性响应**。
+目标由插值构造（插值保真度已在附录验证）。大尺度平均功率的线性响应是标定目标之一；
+若用于论文的协方差结论，还需要验证新模式的协方差。
 
 ### 1.1 local PNG 与"响应"
 
 local 型势：$\Phi = \phi + f_{\rm NL}\left(\phi^2 - \langle \phi^2 \rangle\right)$。
-它的物理效应是 **scale-dependent bias**：长波势 $\phi_L$ 调制局部小尺度功率，示踪物密度获得乘性调制
+它的物理效应包括 **scale-dependent bias**：长波势 $\phi_L$ 调制局部小尺度功率，
+在线性偏置展开中产生额外项
 
-$$\delta_t(\mathbf{x}) \;\to\; \delta_t(\mathbf{x})\,\left[1 + A\,\phi_L(\mathbf{x})\right],
-\qquad A \propto f_{\rm NL}\,b_\phi$$
+$$\delta_t(\mathbf{k}) = b_1\delta_m(\mathbf{k}) + f_{\rm NL}b_\phi^{\rm lit}\phi_G(\mathbf{k})+\cdots.$$
+
+这里 $b_\phi^{\rm lit}$ 指已经包含 local PNG 长短模耦合因子 2 的常见文献约定；
+本代码的理想线性换算是 $b_\phi^{\rm lit}=2B_\phi$。实际目录的 $B_\phi$ 由响应标定决定。
 
 本项目用配对差分定义**响应（奇部）**与**偶部**：
 
@@ -97,7 +106,7 @@ $\mathcal{L}$ 线性于 $f_{\rm NL}$、内容就是 $b_\phi$（核心观测量�
 
 ### 1.2 尺度口径：为什么只看 $k<0.01$
 
-$b_\phi$ 在超大尺度（$k \lesssim 0.01\,h\,{\rm Mpc}^{-1}$）是常数；目标样本自身的 $b_\phi^Q(k)$
+$b_\phi$ 在超大尺度（$k \lesssim 0.01\,h\,{\rm Mpc}^{-1}$）近似为常数；按本实现响应定义换算的目标等效系数 $B_\phi^{Q,\rm eff}(k)$
 从 $k\approx 0.008$ 的 2.41 平滑漂到高 $k$ 的 1.50（40%）。本项目的科学目标（$k_{\min}$ 效应、
 大尺度协方差）只要求 **$k<0.01$ 精确 1:1**，故标定口径取 $k<0.01$（对应最低那个 $k$ bin）。
 """)
@@ -194,17 +203,17 @@ $\phi_G$ 的平方——所以它的效应是局部的、可以逐点理解。
 整体抬高一点 $\Rightarrow$ 那里小尺度结构更多、晕更容易形成。于是**晕的局部数密度被该位置的
 $\phi$ 值调制**：
 
-$$n_h(\mathbf{x}) = \bar n_h\,[1 + b_1\,\delta_m(\mathbf{x})]\,\bigl[1 + 2 f_{\rm NL} b_\phi\,\phi_G(\mathbf{x})\bigr]$$
+$$n_h(\mathbf{x}) \simeq \bar n_h[1+b_1\delta_m(\mathbf{x})][1+2f_{\rm NL}R_\sigma\phi_G(\mathbf{x})],\qquad R_\sigma\equiv\partial\ln\bar n_h/\partial\ln\sigma_8.$$
 
-第一项是普通高斯偏置；第二项是 PNG 的额外调制；$b_\phi$ 是示踪物对势的响应系数
-（由晕的质量、形成历史决定，是**样本的物理性质**，只能测量/标定，不能解析写死）。
+第一项是普通高斯偏置；第二项是 PNG 的额外调制；$R_\sigma$ 是丰度对局部振幅的响应。
+常见文献定义 $b_\phi^{\rm lit}=2R_\sigma$；代码的 B_PHI 是直接标定的输入系数，不按名称与它们等同。
 因为 $\delta_m$ 和 $\phi_G$ 都由同一个原初势生成，两项可以合并成对 $\phi_G$ 的两个"通道"：
 
-$$\delta_t = b_1\delta_m + 2f_{\rm NL}b_\phi\,\phi_G = \phi_G\,\bigl[\underbrace{b_1 M(k)}_{\text{背景通道}} + \underbrace{2f_{\rm NL}b_\phi}_{\text{PNG 通道}}\bigr]$$
+$$\delta_t = b_1\delta_m + 2f_{\rm NL}R_\sigma\phi_G + \cdots = \phi_G[b_1M(k)+2f_{\rm NL}R_\sigma]+\cdots.$$
 
-于是有效偏置 $b_{\rm eff}(k) = b_1 + 2 f_{\rm NL}b_\phi/M(k)$。$M(k)\propto k^2T(k)$ 在低 $k$
+于是在线性极限，有效偏置 $b_{\rm eff}(k)=b_1+2f_{\rm NL}R_\sigma/M(k)$。$M(k)\propto k^2T(k)$ 在低 $k$
 急剧变小（见 (c)），所以 $b_{\rm eff}$ 在大尺度暴涨——这就是著名的 **scale-dependent bias**。
-PNG 信号相对高斯背景的大小，就是两个通道之比 $2f_{\rm NL}b_\phi/(b_1M)$；4.4 节的响应闭式
+PNG 信号相对高斯背景的大小，是两个通道之比 $2f_{\rm NL}R_\sigma/(b_1M)$；4.4 节的线性响应闭式
 本质就是这个比值（再多一个 2 的因子，见 (c)③）。
 
 #### (b) 符号表
@@ -214,7 +223,8 @@ PNG 信号相对高斯背景的大小，就是两个通道之比 $2f_{\rm NL}b_\
 | $\delta_t(\mathbf{x})$ | 示踪物过密度 | $n(\mathbf{x})/\bar n - 1$；EZmock 产出的点集→密度就是它 | EZmock 输出 |
 | $\phi_G(\mathbf{x})$ | 高斯原初势 | 无量纲；代码里 = `mesh->phi`（实空间）/ `mesh->phik`（傅里叶） | EZmock 用 $P_{\rm prim}\propto k^{n_s}$ 生成，与 ZA 位移**用同一个场** |
 | $f_{\rm NL}$ / `FNL` | PNG 强度 | 原初势二次项系数 | 配置键 `FNL` |
-| $b_\phi$ / `B_PHI` | PNG 偏置 | 示踪物密度对单位 $\phi_G$ 的线性响应（见 (a)） | 在 Quijote 目标上测出 $b_\phi^Q$；代码用常数 `B_PHI` 扮演它 |
+| $R_\sigma$ / $b_\phi^{\rm lit}$ | PNG 偏置约定 | $b_\phi^{\rm lit}=2R_\sigma$ | 文献定义，需与代码约定换算 |
+| B_PHI | 代码输入系数 | $A_{\rm inj}=2F_{NL}B_\phi$ | 从当前实现的功率响应直接标定 |
 | $A_{\rm inj}$ | 注入幅度 | $A_{\rm inj} = 2\,F_{NL}\,B_\phi$（系数 2 来自 (a) 的局部 PNG 约定） | 由 `FNL`、`B_PHI` 算出 |
 | $\Psi$ | 注入位移场 | 三分量矢量场，见 (c)② | `mesh->inj[0..2]` |
 | $P_G$ | 高斯功率 | 不注入时示踪物自己的 $P_0$（响应定义的分母） | EZmock 高斯 run |
@@ -251,27 +261,27 @@ run_mock.c:139  EZmock_populate_tracer                [pop_tracer.c:1207]
 
 **为什么注入写在 catalog 上、而不是 `rhot` 上**：在 `rhot`（连续期望场）上乘调制因子会改变
 每格的取样概率 → 点数/总数/PDF 全变，与四旋钮标定纠缠；而在 catalog 上只"挪点"（`apply_png_shift`）
-则**总点数不变、PDF 不变、速度不变**，唯一的可观测变化就是密度场的 $A_{\rm inj}\phi_G$ 调制。
+则**总点数不变、PDF 不变、速度不变**，但密度变化还包含输运项，并非纯局部乘性调制。
 §4.4 响应式里的 $b_1$ 也正是**这个点集自己的偏置**（$\sqrt{P_G/P_{\rm lin}}$，下游量出来的），
 和注入作用的对象同层——闭式才能干净成立。
 
 **本质定位（一句话）**：注入 = **在 EZmock 已经生成好的高斯示踪样本上，叠加 PNG 的线性响应**——
 发生在同一次运行内部、内存里（不是事后改输出文件，因为 $\phi_G$ 不在输出里）。EZmock 负责提供
 高斯骨架（非线性结构、PDF、偏置、RSD 全是它的），PNG 的长波调制由解析式补上；不是重跑一套
-非高斯 N-body。合理性的根据：大尺度上 PNG 对晕场就是一个**线性响应** $2f_{\rm NL}b_\phi\phi_G$，
-本机制按定义写的就是它。不等价的部分是圈图/高阶偏置与 $f_{\rm NL}^2$ 对物质功率谱本身的修正
-（偶部 ~2.9$\sigma$ 的未定论差异就是这类效应的经验痕迹，见 §5）。
+非高斯 N-body。合理性的根据：大尺度上 PNG 对晕场有线性响应 $f_{\rm NL}b_\phi^{\rm lit}\phi_G$，
+本机制可经标定匹配这个系数。不等价的部分包括输运、高阶偏置与
+$f_{\rm NL}^2$ 对物质功率的修正；其大小应由目标统计量检验（偶部的差异见 §5）。
 
 #### (c) 三条公式逐条读
 
-**① 目标式（4.2 节）** $\delta_t \to \delta_t\,[1 + A_{\rm inj}\phi_G]$：把 (a) 的结论原样抄下来。
-读法是"**乘性调制**"——密度场每一点上乘一个由该点 $\phi_G$ 值决定的因子。
+**① 目标式（4.2 节）**：大尺度线性极限增加 $A_{\rm inj}\phi_G$ 的示踪物密度项。
+这只是指定尺度与阶数的响应目标，不是对每点密度场的精确乘法。
 
 **② 位移式（4.3 节）**：为什么用"挪点"而不是真乘？
 
 - 真乘 $n\to n(1+A\phi)$ 会改变样本总数与 PDF（EZmock 的示踪物是点集，乘一个连续场很别扭）；
-- 把每个示踪点从 $\mathbf{x}$ 挪到 $\mathbf{x}+\Psi(\mathbf{x})$，密度场变化一阶恰好是
-  $\hat\delta' = \hat\delta - \mathrm{i}\mathbf{k}\cdot\hat\Psi + O(\Psi\nabla\delta)$——每一项已知；
+- 把每个示踪点从 $\mathbf{x}$ 挪到 $\mathbf{x}+\Psi(\mathbf{x})$，密度场变化一阶是
+  $\delta^\prime=\delta-\nabla\cdot[(1+\delta)\Psi]$；输运项与注入同为位移振幅的一阶；
 - 要让位移贡献正好等于想要的调制（$-\mathrm{i}\mathbf{k}\cdot\hat\Psi = A_{\rm inj}\hat\phi_G$），
   就要 $\hat\Psi_i = \mathrm{i}k_i(A_{\rm inj}/k^2)\hat\phi_G$。**$1/k^2$ 就是"从 $\delta$ 反解位移"时
   $\nabla\cdot\Psi$ 的 Poisson 逆**（$\Psi \sim \nabla\nabla^{-2}\phi$ 的结构）；
@@ -282,9 +292,9 @@ run_mock.c:139  EZmock_populate_tracer                [pop_tracer.c:1207]
 **关于 $\nabla$（倒三角）的两个作用**（读这类公式最容易卡的地方）：
 
 1. **$\nabla\cdot\Psi$（散度）——位移改密度的唯一通道**。点集整体挪一段，局部体积会被压缩或
-   拉伸，密度随之变；一阶展开就是 $\delta' = \delta - \nabla\cdot\Psi + O(\Psi\nabla\delta)$
-   （连续性/质量守恒）。直觉：$\Psi$ 朝四面八方发散（$\nabla\cdot\Psi>0$）$\Rightarrow$ 点被
-   拉开 $\Rightarrow$ 密度变小。所以"想要密度变化 $\Rightarrow$ 就要让位移的**散度**等于它"。
+   拉伸，密度随之变；均匀背景的线性极限是 $\delta^\prime=\delta-\nabla\cdot\Psi$，
+   原有密度结构还产生额外的输运项。直觉：$\Psi$ 发散时，点被
+   拉开 $\Rightarrow$ 密度变小；非均匀背景还会被位置平移重新分配。
 2. **$\Psi = \nabla\Phi_\Psi$（梯度）——位移场本身是标量势的梯度**（ZA 位移无旋，可以这样表示）。
    于是"一个标量场 + 一个 $\nabla$"就表达了三分量矢量场。
 3. 两者在傅里叶空间都变成 $\mathrm{i}\mathbf{k}$：$\nabla \to \mathrm{i}\mathbf{k}$、
@@ -298,7 +308,7 @@ run_mock.c:139  EZmock_populate_tracer                [pop_tracer.c:1207]
 公式里 $\hat\Psi$、$\hat\phi_G$ 头顶的帽子**只是"傅里叶空间"的记号**，没有任何物理内容：
 $\hat\Psi(\mathbf{k})$ 与 $\Psi(\mathbf{x})$ 由傅里叶变换互相**唯一**确定（可逆、无损），
 是同一个物理量的两种写法——像同一句话用两种语言写。它**不是** PNG 修正、**不是**"非高斯势"、
-不代表任何新东西。本项目 PNG 的全部物理都在系数 $A_{\rm inj} = 2F_{NL}B_\phi$ 里；
+不代表任何新东西。本项目示踪物注入强度由系数 $A_{\rm inj} = 2F_{NL}B_\phi$ 控制；
 而 $\phi_G$ 本身就是**纯高斯**场（下标 G = Gaussian），它头顶的帽子只说明用 k 空间写它。
 
 帽子记号之所以好用：微分算符在 k 空间变成乘法（$\nabla\to\mathrm{i}\mathbf{k}$、
@@ -315,10 +325,9 @@ $$\Psi(\mathbf{x}) = -\nabla\,\nabla^{-2}\!\left[A_{\rm inj}\,\phi_G(\mathbf{x})
 
 **$\Psi$ 的身份定位（一句话说准）**：
 
-- 密度层面：**PNG − 高斯 = $A_{\rm inj}\phi_G$**；$\Psi$ 是**实现这个增量的位移**——信号是
-  "密度调制"，$\Psi$ 只是把它写进去的手段（像"模糊"与"卷积核"的关系）；
-- 只承载**线性**响应（$\propto f_{\rm NL}$ 一次方）的那部分 PNG；$f_{\rm NL}^2$ 的"内生"项
-  不在 $\Psi$ 里（只以 $\pm\Psi$ 的平方项形式出现）；
+- 密度层面：**大尺度线性极限的 PNG − 高斯 = $A_{\rm inj}\phi_G$**；
+  在非线性场中，位移还带来输运贡献；
+- 位移场 $\Psi$ 与 $F_{NL}$ 线性，但平移后目录的统计量一般还包含更高阶项；
 - **不是**对 EZmock 自己 ZA 位移（`psi[0..2]`）的修正——那条生成链一个字节没动；$\Psi$ 是在
   **已生成**的示踪点上额外加的一层独立位移（这正是"注入结果"与"注入原因"的区别，§3 vs 本节）；
 - **小位移、大效应**：位移幅度 rms $\approx 1.7$ Mpc/h（只有 EZmock 自身 ZA 位移的约 1/4，
@@ -386,16 +395,16 @@ $$1+\delta(\mathbf{x}) = \left|\det\!\left(\delta_{ij} + \frac{\partial\Psi_i}{\
   （`perturb.c` 的 `twb` 核）正是 $\mathrm{i}k_i/k^2\times$"线性密度"这条 ZA 公式；
   注入位移用**同一个算符**，只把源场从 $\delta_{\rm lin}$ 换成 $A_{\rm inj}\phi_G$。
 - **不一样的物理**：
-  1. 我们**不在模拟引力演化**——是在**构造一个目标密度场**（$\delta_t\to\delta_t(1+A\phi_G)$）。
+  1. 我们**不在模拟引力演化**——是在构造大尺度线性 PNG 密度响应。
      ZA 在这里只是"密度 ↔ 位移"的**一阶字典**；PNG 的物理起源是局部丰度调制
      （peak-background split），**不是**晕被真的推了一下，位移只是实现手段（见上面"身份定位"）。
-  2. 推导用一阶 $\delta'=\delta-\nabla\cdot\Psi$，但实现是把**真实的点真的挪了**——密度自动
-     带上全部平流/雅可比结构（比线性化更完整）；二阶项（$\Psi\nabla\delta$、圈图）相对主项
-     $\sim1/(b_1M)\sim10^{-3}$，低于标定精度，才被写进"可忽略"。
+  2. 实现把**真实的点挪了**，因此密度包含平流与雅可比结构。
+     $-\Psi\cdot\nabla\delta$ 与目标响应同为位移振幅的一阶，不能为任意统计量
+     预设千分之一上界；其影响必须按目标尺度与协方差直接检验。
   3. ZA 的 $\Psi$ 是**拉格朗日**坐标的函数（粒子沿直线飞）；注入是给每个点按**当前**位置加位移
      $\Psi(\mathbf{x})$（欧拉写法）——一阶无差别，实现上也更省事。
 
-**③ 响应闭式（4.4 节）**：注入后
+**③ 大尺度线性响应闭式（4.4 节）**：忽略非线性输运时
 
 $$P(\pm A_{\rm inj}) = P_G \pm 2A_{\rm inj}\langle \delta_t^G \phi_G\rangle + A_{\rm inj}^2 P_\phi
 + O(\Psi\nabla\delta)$$
@@ -407,11 +416,12 @@ $$\mathcal{L}_{\rm inj} = \frac{P(+A)-P(-A)}{2P_G}
 = \frac{2A_{\rm inj}\,b_1MP_\phi}{b_1^2M^2P_\phi} = \frac{2A_{\rm inj}}{b_1M(k)}$$
 
 $b_1$ 在这里的作用一目了然：**信号是"注入通道 × 背景通道"的交叉项**，所以分母显式含 $b_1M$。
-（实测这个式子在 $k\in[0.008,0.045]$ 上平到 5% 以内，见 §5。）
+这不是非线性目录或协方差的精确恒等式；实测平均功率响应见 §5。
 
-**④ 为什么 $B_\phi = b_\phi^Q$ 就 1:1**：Quijote 侧同一推导给出
-$\mathcal{L}_Q = 4f_{\rm NL}b_\phi^Q/(b_1M)$。两式对照：只要 $F_{NL}=f_{\rm NL}$ 且 $B_\phi = b_\phi^Q$，
-响应就严格相等（同一个 $b_1M$ 口径——两侧的大尺度 $b_1$ 本来就由高斯标定对上）。
+**④ 如何与 Quijote 对照**：用同一平均功率响应定义测量
+$\mathcal{L}_Q$ 与 $\mathcal{L}_{\rm inj}(B_\phi)$，再按比值标定 $B_\phi$。
+若外部文献采用 $\delta_t=b_1\delta_m+f_{\rm NL}b_\phi^{\rm lit}\phi_G$，
+理想线性核中应比较 $b_\phi^{\rm lit}=2B_\phi$；不能只凭同名参数断言 1:1。
 
 #### (d) 一个真实数字（最低 bin，$k = 0.0078$ $h$/Mpc）
 
@@ -419,7 +429,7 @@ $\mathcal{L}_Q = 4f_{\rm NL}b_\phi^Q/(b_1M)$。两式对照：只要 $F_{NL}=f_{
 |---|---|---|
 | $M(k)$ | 456 | $=k^2T/(\beta D_{\rm plus})$；$k=0.041$ 处涨到 4981（11 倍）——**PNG 信号在大尺度最大**的数学来源（$\mathcal{L}\propto1/M\propto1/k^2$） |
 | $b_1M$ | $\approx 1.5\times10^3$ | 分母；两种 $b_1$ 口径相差 ~5% |
-| $b_\phi^Q$（目标） | 2.41 | Quijote 测量值（到 $k=0.04$ 漂移降到 1.50，见 §5 边界讨论） |
+| $B_\phi^{Q,\rm eff}$（目标等效系数） | 2.41 | 按本实现功率响应定义换算；到 $k=0.04$ 漂移降到 1.50，见 §5 |
 | 需要 $A_{\rm inj}$ | $\approx \mathcal{L}_Q\,b_1M/2 \approx 0.686\times1.5{\rm e}3/2 \approx 5.1\times10^2$ | 由 $\mathcal{L}_Q=0.686$ 反解 |
 | ⇒ `B_PHI` | $510/(2\times100)\approx 2.6$ | 与定稿 2.65 一致；正式标定与不确定性见 §5 |
 | 注入后 $\mathcal{L}$ | $\approx 0.7$ | $\pm f_{\rm NL}=100$ 使最低 bin 的 $P_0$ 变化 $\pm70\%$——**效应巨大**，必须注入对 |
@@ -428,36 +438,38 @@ $\mathcal{L}_Q = 4f_{\rm NL}b_\phi^Q/(b_1M)$。两式对照：只要 $F_{NL}=f_{
 
 | | 场层面（§3） | 示踪物层面（本节） |
 |---|---|---|
-| 注入的是什么 | $\phi$ 的二次项（"原因"） | 直接写 $\delta_t$ 的调制（"结果"） |
-| 响应能不能算 | 不能（要跑完整链条才知道） | 能（闭式 $\mathcal{L}=2A_{\rm inj}/(b_1M)$） |
+| 注入的是什么 | $\phi$ 的二次项（"原因"） | 对示踪点做势驱动的位置平移 |
+| 响应能不能算 | 要跑完整链条 | 大尺度线性极限有闭式 $\mathcal{L}=2A_{\rm inj}/(b_1M)$，实际目录仍需测量 |
 | 强度可控吗 | 靠 $F_{NL}$ 间接调，还额外依赖网格/四旋钮 | 一个常数 $B_\phi$，跨网格差 3% |
 
 ### 4.2 目标形式
 
-超大尺度上 PNG 的效应就是一个**乘性调制**，那就直接把它写上：
+目标是在超大尺度线性极限得到
 
-$$\delta_t(\mathbf{x}) \;\to\; \delta_t(\mathbf{x})\,\bigl[1 + A_{\rm inj}\,\phi_G(\mathbf{x})\bigr],
-\qquad A_{\rm inj} \equiv 2\,F_{NL}\,B_\phi$$
+$$\delta_t'(\mathbf{k}) = \delta_t(\mathbf{k}) + A_{\rm inj}\phi_G(\mathbf{k})+\cdots,
+\qquad A_{\rm inj} \equiv 2\,F_{NL}\,B_\phi.$$
 
-其中 $\phi_G$ 是**高斯**势场（即 `mesh->phik` 对应的实空间场），$B_\phi$ 是唯一待标定强度
-（物理含义 = 目标样本的 $b_\phi$）。
+$\phi_G$ 是**高斯**势场（即 `mesh->phik` 对应的实空间场）。
+$B_\phi$ 是本实现的待标定系数，并非任意文献中同名参数的数值。
 
-### 4.3 用"位移"实现乘性调制
+### 4.3 用"位移"实现大尺度响应
 
-对示踪点集做整体位移 $n'(\mathbf{x}) = n\left(\mathbf{x} - \Psi(\mathbf{x})\right)$，密度一阶展开：
+对示踪点集做位置平移 $\mathbf{x}'=\mathbf{x}+\Psi(\mathbf{x})$，
+数密度守恒在位移的一阶给出：
 
-$$\hat\delta'(\mathbf{k}) = \hat\delta(\mathbf{k}) - \mathrm{i}\,\mathbf{k}\cdot\hat\Psi(\mathbf{k})
-+ O(\Psi\,\nabla n)$$
+$$\delta_t'=\delta_t-\nabla\cdot[(1+\delta_t)\Psi]
+=\delta_t+A_{\rm inj}\phi_G+A_{\rm inj}\phi_G\delta_t
+-\Psi\cdot\nabla\delta_t+O(\Psi^2).$$
 
 要求 $-\mathrm{i}\,\mathbf{k}\cdot\hat\Psi = A_{\rm inj}\,\hat\phi_G$，即
 
 $$\hat\Psi_i(\mathbf{k}) = \mathrm{i}\,\frac{k_i}{k^2}\,A_{\rm inj}\,\hat\phi_G(\mathbf{k})
 \qquad(\text{纯 } 1/k^2 \text{ 核，不乘任何转移函数})$$
 
-余项 $O(\Psi\nabla n)$ 是真实的非局部（圈图）修正，相对主项 $\sim 1/(b_1 M)\sim 10^{-3}$，
-低于标定精度；$\mathbf{k}=0$ 模式要显式置零（$\hat\phi_G=0$ 且 $1/k^2$ 发散，会得到 NaN）。
+输运项与目标响应同为 $A_{\rm inj}$ 的一阶；低 $k$ 线性系数可以对上，
+却不保证非线性功率、双谱或协方差一致。$\mathbf{k}=0$ 模式要显式置零。
 
-### 4.4 响应有闭式：一个常数就能 1:1
+### 4.4 大尺度线性响应与实际标定
 
 记高斯示踪物功率 $P_G = b_1^2 M^2 P_\phi$、示踪物-势交叉谱
 $C \equiv \langle \delta_t^G \phi_G \rangle = b_1 M P_\phi$，则注入后
@@ -468,12 +480,15 @@ $$P(\pm A_{\rm inj}) = P_G \pm 2 A_{\rm inj} C + O(A_{\rm inj}^2)
 = \frac{2 A_{\rm inj}}{b_1 M(k)} = \frac{4\,F_{NL}\,B_\phi}{b_1 M(k)}$$
 
 其中 $M(k) = k^2 T(k) / (D_{\rm plus}\,\beta)$（代码 `twb` 的同款口径）。
-Quijote 侧用同一口径写出，是**同一函数形式**：
+若 Quijote 侧使用 $\delta_t=b_1\delta_m+f_{\rm NL}b_\phi^{\rm lit}\phi_G$ 的定义，
+相同线性近似给出
 
-$$\mathcal{L}_Q(k) = \frac{4\,f_{\rm NL}\,b_\phi^Q}{b_1 M(k)}$$
+$$\mathcal{L}_Q(k) = \frac{2\,f_{\rm NL}\,b_\phi^{\rm lit}}{b_1 M(k)}.$$
 
-因此取 $B_\phi = b_\phi^Q$ 就严格 1:1：**标定量只剩一个常数**，且形式对任意 $f_{\rm NL}$ 成立
-（实测对 $f_{\rm NL}$ 精确二次，见第 5 节）。
+此时理想线性换算为 $B_\phi=b_\phi^{\rm lit}/2$，但非线性目录的最佳数值
+仍应由相同统计量直接标定，不能只凭参数名称代入。
+实际采用同一功率响应比值标定 $B_\phi$；第 5 节的结果只验证了所测统计量和尺度，
+并未建立新模式的 PNG 协方差等价性。
 
 ### 4.5 代码实现
 
@@ -498,14 +513,15 @@ $$\mathcal{L}_Q(k) = \frac{4\,f_{\rm NL}\,b_\phi^Q}{b_1 M(k)}$$
 | 配置 | 初条件（场层面） | 示踪物层 | 用途 |
 |---|---|---|---|
 | 写 `B_PHI ≠ 0`（标定模式） | **纯高斯**（`FNL_FIELD` 自动取 0，$\phi_{\rm png}=\phi$） | PNG 调制在此 | 本项目的全部标定/验证跑法 |
-| 只写 `FNL`、不写 `B_PHI`（历史模式） | 有 PNG：$\phi + F_{NL}\phi^2$（`FNL_FIELD` 默认 = `FNL`） | 无 | 与改造前二进制逐位一致 |
+| 只写 `FNL`、不写 `B_PHI`（历史模式） | 有 PNG：$\phi + F_{NL}\phi^2$（`FNL_FIELD` 默认 = `FNL`） | 无 | 相同线程数下可与改造前二进制逐位一致 |
 
 即：**"糖糖版初条件里有没有 PNG"取决于配置**——标定模式刻意把未标定的旧机制关掉（否则两套 PNG
 叠加，标定会混乱）；历史模式则完全保留原行为。即使 `FNL_FIELD=0`，初条件里仍然有**高斯**的
 $\phi$ 场（ZA 位移的源头），"没有 PNG"指的是二次项关掉、初条件统计上严格高斯。
 
-**逐位回退保证**：`B_PHI=0` 且 `FNL_FIELD` 不设时，配置路径、RNG 流、输出与改造前二进制
-**逐字节相同**（A/B 实测：$F_{NL}=180$ 与 $F_{NL}=0$ 两档都通过，md5 见验证目录）。
+**逐位回退条件**：`B_PHI=0`、`FNL_FIELD` 不设且线程数相同，配置路径、RNG 流与
+改造前二进制相同（先前 A/B 实测见验证目录）。CLI 现在遵守 `OMP_NUM_THREADS`
+并以 24 为上限；改变线程数会改变 RNG 流，不能要求逐字节相同。
 因此新机制不会污染任何历史结果；`FNL=0`（或 `B_PHI=0`）即可完全关掉注入。
 
 ### 4.6 为什么这样"对"（设计哲学）与边界
@@ -516,7 +532,7 @@ EZmock 本来就是**统计仿制**工具（四旋钮是为别的统计量手调
 
 边界（明确接受的近似）：
 
-- 常数 $B_\phi$ 只在 $k<0.01$ 精确 1:1（高 $k$ 目标 $b_\phi^Q$ 有 40% 漂移，本机制响应形状平坦
+- 常数 $B_\phi$ 只在 $k<0.01$ 的标定尺度上匹配（高 $k$ 目标等效系数有 40% 漂移，本机制响应形状平坦
   $\Rightarrow$ $k\sim 0.03$ 处高估约 30%）。主人明确只关心超大尺度，**不做** $W(k)$ 形状表；
 - 标定值 $\propto$ 示踪物 $b_1$：**重调四旋钮后必须用 `analyze_injection.py` 重标**；
 - 后期计划：在 Quijote 数据上用功率谱模型对 $(b_1,\,p,\,b_\phi)$ 做 MCMC 联合标定
@@ -667,10 +683,10 @@ md(r"""
 | 旧机制 ngrid 依赖（①） | $\mathcal{L}_{128}/\mathcal{L}_{256}\approx 0.23$（4.3 倍；扣 $b_1$ 差异后 5.0 倍），需要 $F_{NL}\approx 140$–$220$ | 原版不可跨分辨率复用 |
 | 新机制响应形状（②） | 常数 $c=\mathcal{L}b_1^{\rm EZ}M/(2A_{\rm inj})$ 平（Ng=256 中位 0.893、rms 约 5–8%） | 闭式响应成立 |
 | 新机制 ngrid 无关（②） | $c$ 的 Ng=128/256 差 **3%**（0.921 vs 0.893，各自用本网格 EZ 示踪物 $b_1$） | 分辨率无关，可移植 |
-| 标定（③） | 定稿 $B_\phi=2.65$；50-real 后最佳 $2.54\pm0.04$ | 与目标 $b_\phi^Q(k\approx 0.008)\approx 2.4$ 一致 |
+| 标定（③） | 定稿 $B_\phi=2.65$；50-real 后最佳 $2.54\pm0.04$ | 与目标等效系数 $B_\phi^{Q,\rm eff}(k\approx 0.008)\approx 2.4$ 同量级 |
 | P0 对比（④，50 real） | 奇部 bin0 比 $1.044\pm 0.016$；拟合区残差 mean/rms 约 1–3% | 与 Quijote 统计一致 |
 | 偶部（④） | EZ $+15.2\%\pm 0.4\%$ vs Q $+10.8\%\pm 1.4\%$（差约 2.9$\sigma$） | 二阶残留，**未定论**，待后续 |
-| 逐字节回退 | `B_PHI=0` 与改造前一致 | 不污染历史/高斯结果 |
+| 逐字节回退 | `B_PHI=0` 且线程数相同时与改造前一致 | 不污染历史/高斯结果 |
 | 对 $f_{\rm NL}$ 严格二次 | $0/30/50/100$ 四点拟合残差 $<0.001\%$ | 可外推到任意 $f_{\rm NL}$ |
 
 **其他已知细节**：
@@ -694,14 +710,14 @@ md(r"""
 | 响应 | 涌现、不可控；依赖四旋钮/ngrid/样本 | 闭式 $\mathcal{L}=2A_{\rm inj}/(b_1 M)$ |
 | 标定 | 经验配平（约有 1.8 倍系数），换网格失效（4 倍） | **一个常数** $B_\phi$，跨网格差 3% |
 | 生长因子 | 写死 $D_0/D_{\rm plus}/\beta$（RSD 速度固定 $z=0$） | 按 $\Omega_m$、输出红移现算（RSD 修正） |
-| 关闭/兼容 | 无"关闭"概念（永远在注入） | `B_PHI=0` $\Rightarrow$ 与改造前逐字节一致 |
+| 关闭/兼容 | 无"关闭"概念（永远在注入） | `B_PHI=0` 且线程数相同时与改造前逐字节一致 |
 | 高 $k$ 行为 | 无法分辨（噪声大） | 已知：常数 $B_\phi$ 仅 $k<0.01$ 精确 1:1 |
 
 **什么时候用哪个**：
 
 - 高斯标定（复现 Quijote $f_{\rm NL}=0$ 的 $P_0/P_2$）→ 官方 stock 版 EZmock；
 - 一切 PNG 相关生产/实验 → 改造版（`manual_tune.ipynb` 的 `EZMOCK_MODE="modified"`，默认）；
-- 原版机制只在兼容性/回归验证时用（`FNL_FIELD` 不设、`B_PHI=0` 即逐位复刻旧行为）。
+- 原版机制只在兼容性/回归验证时用（`FNL_FIELD` 不设、`B_PHI=0`，并保持相同线程数）。
 """)
 
 # ============================================================================

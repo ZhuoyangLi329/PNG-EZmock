@@ -89,7 +89,6 @@ static void EZMOCK_PT_FUNCNAME(EZmock_ZA_disp, EZMOCK_LOGPK_NAME,
 
   const int Ngh = conf->Ng >> 1;
   const int Ngk = Ngh + 1;
-  const int Ngrid=conf->Ng*conf->Ng*conf->Ng;
 
   /* ---- 初条件形状参数：仍是写死的（来源待考，与 Tk_0.txt 配套使用）----
      initial_power = Anorm * k^PrimordialIndex，即原初密度场振幅的平方
@@ -582,11 +581,13 @@ static void EZMOCK_PT_FUNCNAME(EZmock_ZA_disp, EZMOCK_LOGPK_NAME,
 
   //现在，所有的phi格点都有正确的初始高斯势了
   /* ---- 场层面 PNG 二次项（phi_png = phi + Fnl_field*phi^2）----
-     fnl_field 未设置（HUGE_VAL）时退回 conf->fnl，即历史行为；
+     fnl_field 未设置（HUGE_VAL）时，B_PHI=0 退回 conf->fnl；
+     B_PHI 非零时关闭场层注入，与 CLI 的默认配置一致；
      B_PHI≠0 的标定模式下配置会把 fnl_field 显式置 0（关掉这个未标定的机制，
      由示踪物层面注入接管，见下面的注入块）。 */
-  const double Fnl = conf->fnl;   //fNL 由配置项/接口设置（EZMOCK_CONF.fnl），0 表示纯高斯初条件
-  const double Fnl_field = (conf->fnl_field == HUGE_VAL) ? Fnl : conf->fnl_field;
+  const double Fnl = conf->fnl;   /* PNG amplitude from configuration or API. */
+  const double Fnl_field = (conf->fnl_field == HUGE_VAL) ?
+      ((conf->b_phi != 0.0) ? 0.0 : Fnl) : conf->fnl_field;
   //对phi进行变换，得到local形式的PNG phi
 
   printf("开始打印实空间phi\n\n");
@@ -594,7 +595,7 @@ static void EZMOCK_PT_FUNCNAME(EZmock_ZA_disp, EZMOCK_LOGPK_NAME,
     for(int j = 0; j < conf->Ng; j++)
       for(int k = 0; k < conf->Ng; k++)
             {
-             size_t idx = (conf->Ng*i+j)*conf->Ng+k;
+             size_t idx = ((size_t) conf->Ng * i + j) * conf->Ng + k;
 
 
              mesh->phi_png[idx] = mesh->phi[idx] + Fnl_field * mesh->phi[idx]*mesh->phi[idx];
@@ -616,7 +617,7 @@ static void EZMOCK_PT_FUNCNAME(EZmock_ZA_disp, EZMOCK_LOGPK_NAME,
   //FFT_EXEC_R2C(plan2,mesh->phi_png,mesh->phik_png);
 
   //傅里叶逆变换需要normalize，因此，这个循环要把normailize的因子乘上(1/N^3),同时乘上i
-  double normal_factor = 1.0/(conf->Ng*conf->Ng*conf->Ng);
+  double normal_factor = 1.0 / ((double) conf->Ng * conf->Ng * conf->Ng);
 
 
   for (int i = 0; i < conf->Ng; i++) 
@@ -765,19 +766,18 @@ static void EZMOCK_PT_FUNCNAME(EZmock_ZA_disp, EZMOCK_LOGPK_NAME,
      需要的 FNL 不是物理 f_NL（固定四旋钮下要对上 Quijote f_NL=100 得开到 ~180，
      且换 ngrid 还要再换）。这里改成显式注入到示踪物上，强度由参数直接控制：
 
-     目标：把示踪物过密度场乘上势的调制因子（局部、乘性响应）
-         δ_t(x) -> δ_t(x) * [1 + Ainj * φ_G(x)],   Ainj = 2 * fnl * b_phi
-     实现成"把所有示踪物平移一个位移场 Ψ"（乘性 n(1+Aφ) 与平移在 A 的一阶严格
-     等价：δ' = δ + Aφ + Aφδ + O(Ψ∇δ 的圈图项)，圈图项相对主项 ~1/(b1*M)~1e-3，
-     是真实的非局部修正，本就超出本次标定精度）：
-         n'(x) = n(x - Ψ(x))  =>  δ̂'(k) = δ̂(k) - i k·Ψ̂(k) + O(Ψ·∇n)
+     目标：在大尺度线性极限增加 Ainj*φ_G 的示踪物密度响应，
+     Ainj = 2 * fnl * b_phi。把示踪物平移 Ψ 后，数密度守恒给出
+         δ' = δ - ∇·[(1+δ)Ψ] + O(Ψ²)
+            = δ + Ainj*φ_G + Ainj*φ_G*δ - Ψ·∇δ + O(Ψ²)。
+     输运项在非线性场中不能普遍忽略；对协方差等目标统计量需单独验证。
      要求 -i k·Ψ̂(k) = Ainj*φ̂_G(k)，即
          Ψ̂_i(k) = i * k_i * (Ainj/k²) * φ̂_G(k)     （纯 1/k 核，无转移函数）
 
-     与目标响应的对应：注入给 P(k) 的响应为
+     在线性大尺度极限，注入给 P(k) 的响应为
          L_inj(k) = [P(+A)-P(-A)]/(2P_G) = 2*Ainj/(b1*M(k)) = 4*fnl*b_phi/(b1*M(k)),
-     与 Quijote 的 L_Q = 4*f_NL*b_φ/(b1*M) 同形，取 b_phi = b_φ(Q) 即 1:1（b1 由
-     高斯标定本来就对上）。
+     系数 b_phi 应从本实现的实测功率响应标定；不能直接照搬采用不同
+     b_φ 约定的文献数值。低 k 匹配也不自动证明协方差匹配。
 
      代码里用与 ZA 位移完全相同的 i·k 结构：mesh->phik 存的就是高斯势的傅里叶
      系数（c2r 出去即实空间 φ_G），rhok2/3/4 在 psi 算完后已空闲，拿来当复用缓冲。

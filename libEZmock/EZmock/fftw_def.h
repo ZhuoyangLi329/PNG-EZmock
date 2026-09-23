@@ -28,6 +28,10 @@
 
 #include <fftw3.h>
 
+#ifdef SINGLE_PREC
+#error "PNG kernels use double-precision FFTW; SINGLE_PREC is unsupported"
+#endif
+
 /* Macros for different FFTW precisions. */
 #ifdef SINGLE_PREC
 typedef float                   FFT_REAL;

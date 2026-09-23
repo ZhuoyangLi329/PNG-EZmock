@@ -81,8 +81,9 @@ typedef enum {
 #endif
 
   EZMOCK_ERR_UNKNOWN,
+  EZMOCK_ERR_PNG_UNSUPPORTED,
+  EZMOCK_ERR_EMPTY_CHUNK,
 } EZMOCK_ERRNO;
 
 
 #endif
-
