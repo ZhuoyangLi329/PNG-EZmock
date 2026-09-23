@@ -1,0 +1,10 @@
+# 编译产物与本地运行结果不进入源码仓库。
+/EZmock
+*.o
+*.a
+*.so
+*.dylib
+*.dat
+*.log
+__pycache__/
+.ipynb_checkpoints/
